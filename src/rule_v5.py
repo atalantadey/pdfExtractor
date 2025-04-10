@@ -16,6 +16,11 @@ from difflib import SequenceMatcher
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph
 from reportlab.lib.enums import TA_CENTER
+from pptx import Presentation
+from pptx.util import Inches
+from pptx.enum.shapes import MSO_SHAPE
+from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE
+from pptx.dml.color import RGBColor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -33,7 +38,7 @@ PDF_PATH = f"input/sample{sample_no}.pdf"
 input_csv = f"input/sample{sample_no}.csv"
 control_csv = f"input/control_sample{sample_no}.csv"
 OUTPUT_COMBINED_DIR = f"output/combined_error_pages_sample{sample_no}"
-OUTPUT_ERROR_PDF = "output/error_pages.pdf"
+OUTPUT_PPTX = "output/error_pages.pptx"
 csv_file = f"output/processed_sample{sample_no}.csv"
 os.makedirs(OUTPUT_COMBINED_DIR, exist_ok=True)
 
@@ -143,6 +148,7 @@ def group_pages(ocr_data):
             final_sections.append(group)
 
     return final_sections
+
 def save_to_csv(grouped_sections):
     """Save grouped sections into a CSV."""
     
@@ -293,25 +299,27 @@ def get_page_image(doc, page_num, img_path):
 
 
 def create_error_pdf(error_pages,error_string, pdf_path, output_pdf_path):
-    """Creates a PDF containing the combined error pages with optional bold heading."""
-    doc = fitz.open(pdf_path)
-    pdf_writer = canvas.Canvas(output_pdf_path, pagesize=letter)
-    styles = getSampleStyleSheet()
-    normal_style = styles['Normal']
+    """Creates a PPTX presentation containing each error page with context (wide image)."""
+    prs = Presentation()
+    prs.slide_width = Inches(16)  # Landscape
+    prs.slide_height = Inches(9)
 
+    doc = fitz.open(pdf_path)
     num_pages = len(doc)
     padding = 10
-    error_page_count = 0
+    generated_combined_images = []
 
-    for x,error_page_num in enumerate(error_pages) :
-        print(x)
+    for x, error_page_num in enumerate(error_pages):
+        logging.info(f"Processing error page for PPTX: {error_page_num}")
+
+        slide_layout = prs.slide_layouts[5]  # Blank layout
+        slide = prs.slides.add_slide(slide_layout)
+
         pil_images = []
         widths = []
         max_height = 0
         temp_files_to_remove = []
         combined_image_path = None
-
-        logging.info(f"Processing error page: {error_page_num}")
 
         for i in range(max(1, error_page_num - 1), min(num_pages + 1, error_page_num + 2)):
             temp_path = os.path.join(OUTPUT_COMBINED_DIR, f"temp_page_{error_page_num}_{i}.png")
@@ -326,7 +334,6 @@ def create_error_pdf(error_pages,error_string, pdf_path, output_pdf_path):
                     logging.error(f"Could not open image: {temp_path}")
             else:
                 logging.warning(f"Could not extract image for page {i} (near error page {error_page_num}).")
-                # Optionally add a small blank image as a placeholder
                 blank_img = PILImage.new('RGB', (100, 100), color='lightgray')
                 pil_images.append(blank_img)
                 widths.append(blank_img.width)
@@ -344,42 +351,58 @@ def create_error_pdf(error_pages,error_string, pdf_path, output_pdf_path):
                                                 f"{error_string[x]}___combined_error_page_{error_page_num}.png")
             try:
                 combined_image.save(combined_image_path)
-                logging.info(f"✅ Combined image saved for error page {error_page_num} at {combined_image_path}")
+                logging.info(f"✅ Combined image saved for PPTX page {error_page_num} at {combined_image_path}")
+                generated_combined_images.append(combined_image_path)
 
-                img_width_inch = min(letter[0] - 2 * inch, total_width / 72)  # Max width to fit page
-                img_height_inch = (img_width_inch / total_width) * max_height / 72
-                y_position = letter[1] - inch - img_height_inch - 20  # Adjust y position for potential heading
+                # Add heading (error page number) at the top
+                left = Inches(0.5)
+                top = Inches(0.5)
+                width = prs.slide_width - Inches(1)
+                height = Inches(1)
+                txBox = slide.shapes.add_textbox(left, top, width, height)
+                text_frame = txBox.text_frame
+                p = text_frame.add_paragraph()
+                p.text = f"Error Page: {error_page_num}"
+                p.font.size = Inches(0.5)
+                p.font.bold = True
+                text_frame.vertical_anchor = MSO_ANCHOR.TOP  # Align heading to top
+                text_frame.auto_size = MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT
 
-                # Optional: Add a bold heading for the error page
-                heading_text = f"Error Page: {error_page_num}"
-                bold_font_name = "Helvetica-Bold"  # Or another bold font available
-                heading_style = normal_style.clone('HeadingStyle')
-                heading_style.fontName = bold_font_name
-                heading_style.alignment = TA_CENTER
-                heading = Paragraph(heading_text, heading_style)
-                heading_width, heading_height = heading.wrapOn(pdf_writer, letter[0] - 2 * inch, 20) # Adjust width as needed
-                heading.drawOn(pdf_writer, inch, letter[1] - inch - heading_height)
+                # Add combined image below the heading, stretching wide
+                image = PILImage.open(combined_image_path)
+                img_width_px, img_height_px = image.size
+                image_aspect_ratio = img_width_px / img_height_px
 
-                pdf_writer.drawImage(combined_image_path, inch, letter[1] - inch - heading_height - img_height_inch, width=img_width_inch,
-                                    height=img_height_inch)
-                pdf_writer.showPage()
-                error_page_count += 1
+                available_width = prs.slide_width - Inches(1)
+                image_width_on_slide = available_width
+                image_height_on_slide = image_width_on_slide / image_aspect_ratio
+
+                # Position the image below the heading
+                image_top = Inches(1.5) # Adjust as needed based on heading height
+
+                if image_height_on_slide > prs.slide_height - Inches(2):
+                    image_height_on_slide = prs.slide_height - Inches(2)
+                    image_width_on_slide = image_height_on_slide * image_aspect_ratio
+                    image_left = (prs.slide_width - image_width_on_slide) / 2
+                    slide.shapes.add_picture(combined_image_path, image_left, image_top, width=image_width_on_slide, height=image_height_on_slide)
+                else:
+                    image_left = Inches(0.5)
+                    slide.shapes.add_picture(combined_image_path, image_left, image_top, width=image_width_on_slide, height=image_height_on_slide)
+
 
             except Exception as e:
-                logging.error(f"Error saving combined image for page {error_page_num}: {e}")
+                logging.error(f"Error adding combined image to PPTX for page {error_page_num}: {e}")
 
             for img in pil_images:
                 img.close()
 
-    ''' for temp_file in temp_files_to_remove:
+        for temp_file in temp_files_to_remove:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
-        if combined_image_path and os.path.exists(combined_image_path):
-            os.remove(combined_image_path) # Clean up combined image after adding to PDF'''
 
-    pdf_writer.save()
+    prs.save(OUTPUT_PPTX)
     doc.close()
-    print(f"✅ {error_page_count} error pages combined into PDF: {output_pdf_path}")
+    print(f"✅ Error pages combined into PPTX (wide image): {OUTPUT_PPTX}")
 
 
 if __name__ == "__main__":
@@ -411,8 +434,8 @@ if __name__ == "__main__":
         error_percentage_input, error_percentage_control, control_ranges, processed_ranges, input_ranges, control_ranges, error_input_pages, error_control_pages,controlvector,processedvector = calculate_error_percentage(
             csv_file, input_csv, control_csv,controlvector,processedvector)
 
-        print("\n🚨 Pages with Errors (Input):", sorted(list(error_input_pages)))
-        print("\n🚨 Pages with Errors (Control):", sorted(list(error_control_pages)))
+        #print("\n🚨 Pages with Errors (Input):", sorted(list(error_input_pages)))
+        #print("\n🚨 Pages with Errors (Control):", sorted(list(error_control_pages)))
         for i in range(0, n_pages):
                 print(f"Control Vector : Page {i+1}: {controlvector[i]}\t\tProcessed Vector : Page {i+1}: {processedvector[i]}\t\t Error = {controlvector[i]^processedvector[i]}")
                 if controlvector[i]^processedvector[i] == 1:
@@ -423,8 +446,7 @@ if __name__ == "__main__":
         print(f"Error Pages : {errorlist}")
         print(f"Total Error Percentage : {errorCounter/n_pages*100:.2f}%")
         #plot_comparison_chart(csv_file, input_csv, control_csv, error_input_pages, error_control_pages)
-
         print(f"✅ Combined error page images saved in: {OUTPUT_COMBINED_DIR}")
-        create_error_pdf(errorlist,errorString, PDF_PATH, OUTPUT_ERROR_PDF)
-        print(f"✅ Combined error pages PDF saved at {OUTPUT_ERROR_PDF}")
+        create_error_pdf(errorlist,errorString, PDF_PATH, OUTPUT_PPTX)
+        print(f"✅ Combined error pages PDF saved at {OUTPUT_PPTX}")
         # create_error_pdf(error_input_pages, PDF_PATH, OUTPUT_ERROR_PDF.replace(".pdf", "_input_errors.pdf"))
