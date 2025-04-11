@@ -6,14 +6,13 @@ import csv
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-sample="4"
+sample="3"
 input_dir="output/"
 csv_file = f"input/control_sample{sample}.csv"
 
 
 def readInputJson():
-  #  with open(input_dir + "input" + sample + ".json", "r") as file:
-    with open(input_dir + "ocr_results.json") as file:
+    with open(input_dir + f"ocr_results{sample}.json") as file:
         data = json.load(file)
     num_pages = len(data["pages"])
     return data,num_pages
@@ -32,6 +31,7 @@ def read_input_csv(controlvector):
                     logging.warning(f"Invalid row in CSV: {row} - {e}")
     return controlvector
 def page_info_signal(prevPage,currPage):
+    
     return 1
 
 def date_signal(prevPage,currPage):
@@ -40,8 +40,8 @@ def date_signal(prevPage,currPage):
 def heading_signal(prevPage,currPage):
     return 1
 
-def page_info_general(prevPage,currPage):
-    return 1
+#def page_info_general(prevPage,currPage):
+    #return 1
 
 def isContinous(prevPage,currPage):
     continuity_weight = 0
@@ -49,14 +49,14 @@ def isContinous(prevPage,currPage):
     page_info_weight = 0.4
     date_weight = 0.3
     heading_weight = 0.3
-    page_info_general_weight = 0.0
+    #page_info_general_weight = 0.0
     continuity_weight += page_info_signal(prevPage,currPage)*page_info_weight
     continuity_weight += date_signal(prevPage,currPage)*date_weight
     continuity_weight += heading_signal(prevPage,currPage)*heading_weight
-    continuity_weight += page_info_general(prevPage,currPage)*page_info_general_weight
+    #continuity_weight += page_info_general(prevPage,currPage)*page_info_general_weight
     
     
-    return 0 if 1- continuity_weight <= continuity_threshold else 1
+    return 0 if 1- continuity_weight < continuity_threshold else 1
 
 
 
@@ -70,10 +70,10 @@ def main():
     data,num_pages =  readInputJson()
     controlvector = [0]*num_pages
     controlvector = read_input_csv(controlvector)
-    print(controlvector)
+    print(f"Control Vector : {controlvector}")
     processedvector = [1]*num_pages
     processedvector = processSignals(processedvector,data,num_pages)
-    print(processedvector)
+    print(f"Processed Vector : {processedvector}")
     errorCounter=0
     errorlist=[]
     errorString=[]
