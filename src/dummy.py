@@ -6,16 +6,19 @@ from PIL import Image,ImageEnhance, ImageFilter
 import fitz # PyMuPDF
 import spacy  # Import spaCy for NLP-based matching
 import pytesseract
+import time
+
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-sample="5"
+sample="1"
 OCR_CONFIG = "--psm 1 --oem 3"  # PSM 1 for automatic with OSD, OEM 3 for best engine
 output_dir = "output/"
 os.makedirs(output_dir, exist_ok=True)
-pdf_path = "input/sample1.pdf"
+#pdf_path = "input/sample{sample}.pdf"
 ocr_path = os.path.join(output_dir, f"ocr_results{sample}.json")
 # Load spaCy model
 try:
@@ -27,7 +30,7 @@ except OSError:
     
 def extract_page_number_strict(text):
     """Extract page number in 'Page X of Y' format only."""
-    pattern = r'(page|PAGE)\s+(\d+)\s+of\s+(\d+)'
+    pattern = r'(page|PAGE|Sheet)\s+(\d+)\s+of\s+(\d+)'
     match = re.search(pattern, text, re.IGNORECASE)
     if match:
         try:
@@ -135,7 +138,7 @@ def perform_ocr_accurate(image):
     # 2. Grayscale and slight contrast
     gray = image.convert('L')
     enhancer = ImageEnhance.Contrast(gray)
-    enhanced = enhancer.enhance(1.2)
+    enhanced = enhancer.enhance(1.3)
     text += pytesseract.image_to_string(enhanced, config=OCR_CONFIG) + "\n"
 
     # 3. Binarization (adaptive thresholding might be better for complex backgrounds)
@@ -169,16 +172,11 @@ def process_page(page_number, image, ):
     signals["page_info_strict"] = extract_page_number_strict(signals["full_text"])
     signals["page_info_general"] = extract_page_number_general(signals["full_text"])
     signals["date"] = extract_date(signals["full_text"])
-    signals["heading"] = extract_heading(signals["full_text"])
-
-    weight = 0
-    continuity_reasons = {}    
+    signals["heading"] = extract_heading(signals["full_text"])  
     
     return {
         "page_number": page_number,
         "signals": signals,
-        "continuity_weight": weight,
-        "continuity_reasons": continuity_reasons,
         "full_text_preview": signals["full_text"][:350] if signals["full_text"] else None,
     },signals
 
@@ -230,6 +228,7 @@ def main():
         
 def readfile():
     pdf_path = f"input/sample{sample}.pdf"
+    
     doc = fitz.open(pdf_path)
     images = [Image.frombytes("RGB", [page.get_pixmap().width, page.get_pixmap().height], page.get_pixmap().samples) for page in doc]
     ocr_results = perform_ocr(images)
@@ -244,5 +243,9 @@ def save_results(results):
         json.dump(results, f, indent=4)
 
 if __name__ == "__main__":
+    start_time = time.time()
     main()
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Elapsed Time for OCR : {elapsed_time} seconds")
     

@@ -8,7 +8,7 @@ from datetime import datetime
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-sample="3"
+sample="5"
 input_dir="output/"
 csv_file = f"input/control_sample{sample}.csv"
 
@@ -55,8 +55,8 @@ def page_info_signal(prevPage,currPage):
     if page_info_strict_prev and page_info_strict_curr:
         prev_pn, prev_total = page_info_strict_prev
         curr_pn, curr_total = page_info_strict_curr
-        print(f"Prev Page Number: {prev_pn}, Prev Total Pages: {prev_total}")
-        print(f"Curr Page Number: {curr_pn}, Curr Total Pages: {curr_total}")
+        #print(f"Prev Page Number: {prev_pn}, Prev Total Pages: {prev_total}")
+        #print(f"Curr Page Number: {curr_pn}, Curr Total Pages: {curr_total}")
         # Continuous if same total and current page is next
         if prev_total == curr_total and prev_pn + 1 == curr_pn:
             return 1  # Continuous
@@ -73,7 +73,7 @@ def date_signal(prevPage,currPage):
     if prev_dates and curr_dates:
         for d1 in prev_dates:
             if d1 in curr_dates:
-                print(f"Matching date found: {d1}")
+                #print(f"Matching date found: {d1}")
                 return 1  # Dates are close
     return 0  # No close dates
 
@@ -83,7 +83,7 @@ def heading_signal(prevPage,currPage):
     if heading_prev and heading:
         lcs = longest_common_substring_length(heading_prev, heading)
         if len(lcs) > 0.8 * min(len(heading_prev), len(heading)):
-            print(f"Heading {heading_prev} and {heading} ::::: are similar")
+            #print(f"Heading {heading_prev} and {heading} ::::: are similar")
             return 1  # Headings are similar
     return 0  # Headings differ
 
@@ -99,8 +99,8 @@ def isContinous(prevPage,currPage):
     continuity_weight += page_info_signal(prevPage,currPage)*page_info_weight
     continuity_weight += date_signal(prevPage,currPage)*date_weight
     continuity_weight += heading_signal(prevPage,currPage)*heading_weight
-    if page_info_signal(prevPage,currPage) or date_signal(prevPage,currPage) or heading_signal(prevPage,currPage):
-        print(f"Page Info Weight : {page_info_signal(prevPage,currPage)*page_info_weight}\tDate Weight : {date_signal(prevPage,currPage)*date_weight}\tHeading Weight : {heading_signal(prevPage,currPage)*heading_weight}\t\tContinuity Weight : {continuity_weight}\n\n")
+    #if page_info_signal(prevPage,currPage) or date_signal(prevPage,currPage) or heading_signal(prevPage,currPage):
+        #print(f"Page Info Weight : {page_info_signal(prevPage,currPage)*page_info_weight}\tDate Weight : {date_signal(prevPage,currPage)*date_weight}\tHeading Weight : {heading_signal(prevPage,currPage)*heading_weight}\t\tContinuity Weight : {continuity_weight}\n\n")
     return 0 if continuity_weight >= continuity_threshold else 1
 
 def processSignals(processedvector,data,num_pages):
@@ -109,7 +109,7 @@ def processSignals(processedvector,data,num_pages):
         page_info = data["pages"][i]
         page_info_prev = data["pages"][i-1]
         page_number = page_info["page_number"]
-        print(f"Page Number : {page_number}")
+        #print(f"Page Number : {page_number}")
         processedvector[i] = isContinous(page_info_prev,page_info)
         
     return processedvector
@@ -119,12 +119,12 @@ def main():
     #Control Vector 
     controlvector = [0]*num_pages
     controlvector = read_input_csv(controlvector)
-    print(f"Control Vector : {controlvector}")
+    #print(f"Control Vector : {controlvector}")
     #Processed Vector
     processedvector = [1]*num_pages
     processedvector = processSignals(processedvector,data,num_pages)
-    print(f"Processed Vector : {processedvector}")
-    
+    #print(f"Processed Vector : {processedvector}")
+    print(f"Sample No : {sample}\n")
     #Error Calculation
     errorCounter=0
     errorlist=[]
@@ -136,8 +136,8 @@ def main():
             errorString.append("DC") if controlvector[i] else  errorString.append("CD")
             #print(f"Error on Page {i+1}")
             errorlist.append(i+1)
-    print(f"Error Pages : {errorlist}")
-    print(f"Total Error Percentage : {errorCounter/num_pages*100:.2f}%")
+    print(f"Error Pages : {errorlist}\n")
+    print(f"Total Error Percentage : {errorCounter/num_pages*100:.2f}%\n\n")
 
 if __name__ == "__main__":
     main()
